@@ -1,12 +1,19 @@
 const express=require('express'),crypto=require('crypto'),Database=require('better-sqlite3');
 const SALARY=+process.env.SALARY||300000000, NEED=9e9, START=50000000, DAY=864e5;
-const db=new Database(process.env.DB_PATH||'game.db');
+const path=require('path'),fs=require('fs');
+const DIR=process.env.DATA_DIR||process.env.RAILWAY_VOLUME_MOUNT_PATH||'.';fs.mkdirSync(DIR,{recursive:true});
+const db=new Database(process.env.DB_PATH||path.join(DIR,'game.db'));db.pragma('journal_mode=WAL');
+if(DIR==='.'&&!process.env.DB_PATH)console.warn('WARNING: no volume mounted - data will be lost on redeploy');
 const DR=+process.env.DEP_RATE||.01, LR=+process.env.LOAN_RATE||.05, LIST_FEE=+process.env.LIST_FEE||1e8;
 db.exec(`create table if not exists users(id integer primary key,username text unique,salt text,hash text,balance real default ${START},last_salary integer default 0,exchange integer default 0);
 create table if not exists sessions(token text primary key,uid integer);
 create table if not exists holdings(uid integer,sym text,amt real default 0,primary key(uid,sym));
 create table if not exists exchanges(id integer primary key,name text,owner integer,salt text,hash text,fee real default 0.002,earned real default 0,volume real default 0,trades integer default 0);`);
 try{db.exec('alter table exchanges add column bankrupt integer default 0')}catch(e){}
+try{db.exec('alter table users add column wallet text')}catch(e){}
+const addr=()=>'0x'+crypto.randomBytes(20).toString('hex');
+db.prepare('select id from users where wallet is null').all().forEach(u=>db.prepare('update users set wallet=? where id=?').run(addr(),u.id));
+db.exec('create unique index if not exists uw on users(wallet)');
 db.exec(`create table if not exists complaints(id integer primary key,ex integer,uid integer,text text,status text default 'open',reply text,created integer);create table if not exists ex_users(ex integer,uid integer,primary key(ex,uid));
 create table if not exists bank(uid integer primary key,dep real default 0,loan real default 0,ts integer default 0);
 create table if not exists custom_coins(sym text primary key,name text,price real,open real,ex integer);`);
@@ -30,13 +37,13 @@ const accrue=uid=>{const b=db.prepare('select * from bank where uid=?').get(uid)
 const wealth=uid=>{const u=db.prepare('select balance from users where id=?').get(uid),b=accrue(uid);
  return u.balance+b.dep-b.loan+db.prepare('select sym,amt from holdings where uid=?').all(uid).reduce((s,h)=>s+h.amt*(mk[h.sym]?.price||0),0)};
 const login=uid=>{const t=crypto.randomBytes(24).toString('hex');db.prepare('insert into sessions values(?,?)').run(t,uid);return t};
-const view=uid=>{const u=db.prepare('select username,balance,last_salary,exchange from users where id=?').get(uid);
+const view=uid=>{const u=db.prepare('select username,balance,last_salary,exchange,wallet from users where id=?').get(uid);
  const b=accrue(uid);return{...u,dep:b.dep,loan:b.loan,dr:DR,lr:LR,lf:LIST_FEE,mine:db.prepare('select id,name,fee,earned,volume,trades,bankrupt from exchanges where owner=?').all(uid),salary:SALARY,need:NEED,next:u.last_salary+DAY,hold:db.prepare('select sym,amt from holdings where uid=? and amt>0').all(uid)}};
 app.post('/api/signup',wrap((q,r)=>{const{username:u,password:p}=q.body;
  if(!/^[a-zA-Z0-9_]{3,20}$/.test(u||''))throw Error('نام کاربری ۳ تا ۲۰ حرف انگلیسی/عدد باشد');
  if((p||'').length<6)throw Error('رمز عبور حداقل ۶ کاراکتر باشد');
  if(db.prepare('select 1 from users where username=?').get(u))throw Error('این نام کاربری گرفته شده');
- const s=crypto.randomBytes(8).toString('hex');const id=db.prepare('insert into users(username,salt,hash) values(?,?,?)').run(u,s,hash(p,s)).lastInsertRowid;
+ const s=crypto.randomBytes(8).toString('hex');const id=db.prepare('insert into users(username,salt,hash,wallet) values(?,?,?,?)').run(u,s,hash(p,s),addr()).lastInsertRowid;
  r.json({token:login(id)})}));
 app.post('/api/login',wrap((q,r)=>{const u=db.prepare('select * from users where username=?').get(q.body.username||'');
  if(!u||hash(q.body.password||'',u.salt)!==u.hash)throw Error('نام کاربری یا رمز اشتباه است');r.json({token:login(u.id)})}));
@@ -109,6 +116,8 @@ app.post('/api/central',auth,wrap((q,r)=>{const P=process.env.CENTRAL_PASS;if(!P
  if(x==='resolve')db.prepare("update complaints set status='resolved',reply=? where id=?").run(String(value||'').slice(0,300),+id);
  else if(x==='bankrupt')bust(+id);
  else if(x==='reinstate'){db.prepare('update exchanges set bankrupt=0 where id=?').run(+id);db.prepare("update complaints set status='resolved',reply='صرافی بازگشایی شد' where ex=? and status='open'").run(+id)}
+ else if(x==='addmoney'){const u=db.prepare('select id from users where username=?').get(String(q.body.to||'')),a=Math.floor(+value);
+  if(!u)throw Error('کاربر پیدا نشد');if(!(a>0&&a<=1e13))throw Error('مبلغ نامعتبر است');db.prepare('update users set balance=balance+? where id=?').run(a,u.id)}
  r.json({complaints:db.prepare('select c.id,c.ex,e.name exname,u.username,c.text,c.status,c.reply from complaints c join exchanges e on e.id=c.ex join users u on u.id=c.uid order by c.id desc limit 100').all(),
   ex:db.prepare('select id,name,owner,bankrupt,fee,earned,volume,trades from exchanges').all()})}));
 app.post('/api/bank',auth,wrap((q,r)=>{const a=Math.floor(+q.body.amount),x=q.body.action;if(!(a>0))throw Error('مبلغ نامعتبر است');
@@ -123,7 +132,13 @@ app.post('/api/transfer',auth,wrap((q,r)=>{const a=Math.floor(+q.body.amount),to
  if(!to||to.id===q.uid)throw Error('گیرنده نامعتبر است');if(!(a>0))throw Error('مبلغ نامعتبر است');
  db.transaction(()=>{if(db.prepare('select balance from users where id=?').get(q.uid).balance<a)throw Error('موجودی کافی نیست');
   db.prepare('update users set balance=balance-? where id=?').run(a,q.uid);db.prepare('update users set balance=balance+? where id=?').run(a,to.id)})();r.json(view(q.uid))}));
+app.post('/api/send',auth,wrap((q,r)=>{const sym=String(q.body.sym||''),a=+q.body.amount,to=db.prepare('select id from users where wallet=?').get(String(q.body.to||'').trim().toLowerCase());
+ if(!mk[sym])throw Error('ارز نامعتبر است');if(!to)throw Error('آدرس ولت مقصد پیدا نشد');if(to.id===q.uid)throw Error('نمی‌توانید به ولت خودتان ارسال کنید');if(!(a>0))throw Error('مقدار نامعتبر است');
+ db.transaction(()=>{const h=db.prepare('select amt from holdings where uid=? and sym=?').get(q.uid,sym)?.amt||0;if(a>h)throw Error('دارایی کافی نیست');
+  db.prepare('update holdings set amt=amt-? where uid=? and sym=?').run(a,q.uid,sym);
+  db.prepare('insert into holdings values(?,?,?) on conflict(uid,sym) do update set amt=amt+?').run(to.id,sym,a,a)})();r.json(view(q.uid))}));
 app.get('/api/top',auth,(q,r)=>{const us=db.prepare('select id,username,balance from users').all(),w={};us.forEach(u=>w[u.id]=u.balance);db.prepare('select uid,dep,loan from bank').all().forEach(b=>{if(w[b.uid]!==undefined)w[b.uid]+=b.dep-b.loan});
  db.prepare('select uid,sym,amt from holdings').all().forEach(h=>{if(w[h.uid]!==undefined)w[h.uid]+=h.amt*(mk[h.sym]?.price||0)});
  r.json(us.map(u=>({username:u.username,wealth:w[u.id]})).sort((a,b)=>b.wealth-a.wealth).slice(0,10))});
-app.listen(process.env.PORT||3000,()=>console.log('up'));
+process.on('SIGTERM',()=>{try{db.close()}catch(e){}process.exit(0)});
+app.listen(process.env.PORT||3000,()=>console.log('up, data in',path.resolve(DIR)));

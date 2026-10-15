@@ -173,7 +173,9 @@ ${e.bankrupt?'<div class="err">این صرافی ورشکسته شده و معا
 <div class="qk">${[.25,.5,.75,1].map(q=>`<button data-q="${q}">${q==1?'همه':fa(q*100)+'٪'}</button>`).join('')}</div>
 <div class="est"><span class="mu">${side=='buy'?'دریافتی تقریبی':'مبلغ تقریبی'}</span><b id="est">—</b></div>
 <button class="full ${side=='buy'?'b':'s'}" id="go" ${e.bankrupt?'disabled':''}>${side=='buy'?'خرید':'فروش'} ${m.name}</button></div>
-${xs!=1?`<div class="card"><div class="hd"><h2>📣 ثبت شکایت از «${e.name}»</h2></div><p class="mu" style="margin:0 0 6px">اگر صاحب صرافی تخلف کرده، شکایت کنید. با شکایت ۵ نفر صرافی ورشکسته می‌شود.</p><textarea id="ct" placeholder="متن شکایت (۱۰ تا ۵۰۰ حرف)"></textarea><button class="g full" id="cp">ارسال شکایت</button></div>`:''}`}
+${xs!=1?`<div class="card"><div class="hd"><h2>📣 ثبت شکایت از «${e.name}»</h2></div><p class="mu" style="margin:0 0 6px">اگر صاحب صرافی تخلف کرده، شکایت کنید. با شکایت ۵ نفر صرافی ورشکسته می‌شود.</p><textarea id="ct" placeholder="متن شکایت (۱۰ تا ۵۰۰ حرف)"></textarea><button class="g full" id="cp">ارسال شکایت</button></div>`:''}${sendCard()}`}
+function sendCard(){const o=me.hold.map(x=>{const m=mk.find(k=>k.sym==x.sym);return`<option value="${esc(x.sym)}">${esc(m?m.name:x.sym)} (${esc(x.sym)}) — ${d(x.amt)}</option>`}).join('');
+ return`<div class="card"><div class="hd"><h2>📤 انتقال ارز دیجیتال</h2></div><div class="mu" style="margin-bottom:4px">آدرس ولت شما (برای دریافت)</div><div class="row"><input id="wa" value="${esc(me.wallet)}" readonly dir="ltr"><button class="g" id="wc" style="flex:0 0 auto">کپی</button></div>${me.hold.length?`<div class="mu" style="margin:10px 0 4px">ارسال به ولت دیگر</div><input id="sa" placeholder="آدرس ولت مقصد (0x...)" dir="ltr"><select id="sc" style="width:100%;margin-top:6px">${o}</select><input id="sn2" type="number" placeholder="مقدار" style="margin-top:6px"><button class="full" id="sd" style="margin-top:8px">ارسال</button>`:'<p class="mu" style="margin:10px 0 0">هنوز ارزی ندارید که ارسال کنید.</p>'}</div>`}
 function wal(){const tot=worth();
  return`<div class="card"><div class="st"><div><span class="mu">موجودی نقد</span><b>${f(me.balance)}</b></div><div><span class="mu">ارزش ارزها</span><b data-hv>${f(tot)}</b></div><div><span class="mu">ثروت کل</span><b data-nw>${f(net())}</b></div></div></div>
 <div class="card"><div class="hd"><h2>👛 دارایی‌های من</h2></div>${me.hold.length?me.hold.map(h=>{const m=mk.find(x=>x.sym==h.sym)||{name:h.sym};return`<div class="li" data-go="${h.sym}" style="cursor:pointer">${avatar(h.sym)}<div class="ci"><b>${m.name}</b><span class="mu">${d(h.amt)} ${h.sym}</span></div><div class="cp"><b data-v="${h.sym}" data-a="${h.amt}">${f(h.amt*price(h.sym))}</b><span class="mu">تومان</span></div></div>`}).join(''):`<div class="empty"><b>🪙</b>هنوز ارزی نخریده‌اید.<br><button style="margin-top:12px" data-t="ex">رفتن به صرافی</button></div>`}</div>`}
@@ -195,7 +197,9 @@ ${(adm.coins||[]).map(c=>`<div class="li">${avatar(c.sym)}<div class="ci"><b>${e
 <button class="full" id="lc" style="margin-top:6px">لیست ارز جدید</button>
 <p class="mu" style="margin:8px 0 0">حداکثر ۳ ارز برای هر صرافی؛ ارز فقط در همین صرافی معامله می‌شود. با حذف ارز، دارندگان به قیمت روز تسویه می‌شوند.</p></div>`}
 /* ---------- render ---------- */
-function central(){const c=cen.data;
+function moneyCard(){return`<div class="card"><div class="hd"><h2>💰 افزودن پول به بازیکن</h2></div><input id="amu" placeholder="نام کاربری بازیکن" dir="ltr"><input id="ama" type="number" placeholder="مبلغ (تومان)" style="margin-top:6px"><button class="full" id="am" style="margin-top:8px">افزودن به موجودی</button></div>`}
+function central(){return centralBase()+(cen.data?moneyCard():'')}
+function centralBase(){const c=cen.data;
  if(!c)return`<div class="card"><div class="hd"><h2>🛡 پنل مدیریت مرکزی</h2><button class="g" id="cb" style="padding:6px 14px">بازگشت</button></div><input id="cpw" type="password" placeholder="رمز صرافی مرکزی" dir="ltr"><button class="full" id="cl" style="margin-top:6px">ورود</button></div>`;
  return`<div class="card"><div class="hd"><h2>🛡 صرافی‌ها</h2><button class="g" id="cx" style="padding:6px 14px">خروج</button></div>
 ${c.ex.filter(x=>x.id!=1).map(x=>`<div class="li"><div class="ci"><b>${esc(x.name)} ${x.bankrupt?'<span class="tag">ورشکسته</span>':''}</b><span class="mu">حجم ${f(x.volume)} · معامله ${f(x.trades)}</span></div>${x.bankrupt?`<button class="b" data-ci="reinstate" data-id="${x.id}" style="padding:6px 12px">بازگشایی</button>`:`<button class="s" data-ci="bankrupt" data-id="${x.id}" style="padding:6px 12px">ورشکسته</button>`}</div>`).join('')||'<div class="mu">صرافی دیگری وجود ندارد.</div>'}</div>
@@ -221,6 +225,9 @@ function draw(){A.innerHTML=`<div class="w">${head()}${{bank,ex,wal,top:topv,adm
  on('cp',()=>t(async()=>{await api('complaint',{ex:xs,text:$('#ct').value})},'شکایت شما ثبت شد'));
  on('al',()=>t(async()=>{adm.id=+$('#ai').value;adm.pass=$('#ap').value;const j=await api('exchange/admin',{id:adm.id,pass:adm.pass,action:'info'});adm.info=j.ex;adm.coins=j.coins}));
  on('ao',()=>{adm={id:0,pass:'',info:null};draw()});
+ on('sd',()=>t(async()=>{me=await api('send',{to:$('#sa').value,sym:$('#sc').value,amount:$('#sn2').value})},'ارز ارسال شد ✅'));
+ on('wc',()=>{try{navigator.clipboard.writeText(me.wallet);toast('آدرس کپی شد')}catch(e){$('#wa').select()}});
+ on('am',()=>t(async()=>{cen.data=await api('central',{pass:cen.pass,action:'addmoney',to:$('#amu').value.trim(),value:$('#ama').value})},'پول به حساب بازیکن اضافه شد 💰'));
  on('wd',()=>ad('withdraw',0,'کارمزد به حساب شما واریز شد'));on('sf',()=>ad('fee',$('#fe').value,'کارمزد ثبت شد'));
  on('sn',()=>ad('rename',$('#nm').value,'نام تغییر کرد'));on('sp',()=>ad('pass',$('#np').value,'رمز تغییر کرد'));
  $$('[data-x]').forEach(p=>p.onclick=()=>{xs=+p.dataset.x;draw()});
