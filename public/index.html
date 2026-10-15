@@ -109,17 +109,19 @@ a{color:var(--ac);text-decoration:none}
 </style></head><body><div id="toasts"></div><div id="app"></div>
 <script>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],A=$('#app');
-let T=localStorage.t,me,mk=[],exs=[],sel='BTC',xs=1,tab='bank',mode='login',side='buy',adm={id:0,pass:'',info:null},hist={},topL=[],DAY=864e5;
+let T=localStorage.t,me,mk=[],exs=[],sel='BTC',xs=1,tab='bank',mode='login',side='buy',adm={id:0,pass:'',info:null},hist={},topL=[],cen={pass:'',data:null},DAY=864e5;
 const f=n=>Math.round(n).toLocaleString('fa-IR'),d=(n,x=6)=>(+n).toLocaleString('fa-IR',{maximumFractionDigits:x});
 const fa=s=>String(s).replace(/\d/g,x=>'۰۱۲۳۴۵۶۷۸۹'[x]);
 const short=n=>n>=1e9?d(n/1e9,2)+' میلیارد تومان':n>=1e6?d(n/1e6,1)+' میلیون تومان':'';
 const COL={BTC:'#f7931a',ETH:'#627eea',USDT:'#26a17b',TRX:'#ef0027',DOGE:'#c2a633'};
 const price=s=>mk.find(x=>x.sym==s)?.price||0;
 const worth=()=>me.hold.reduce((a,h)=>a+h.amt*price(h.sym),0);
+const net=()=>me.balance+(worth())+(me.dep||0)-(me.loan||0);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function toast(m,t){const e=document.createElement('div');e.className='toast '+(t||'');e.textContent=m;$('#toasts').appendChild(e);setTimeout(()=>{e.style.transition='.3s';e.style.opacity=0;setTimeout(()=>e.remove(),300)},3200)}
 async function api(p,b){const r=await fetch('/api/'+p,{method:b?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer '+T},body:b?JSON.stringify(b):undefined});
  const j=await r.json();if(!r.ok){if(r.status==401&&T){out()}throw Error(j.error||'خطا')}return j}
-function out(){localStorage.removeItem('t');T=null;me=null;adm={id:0,pass:'',info:null};authView()}
+function out(){localStorage.removeItem('t');T=null;me=null;cen={pass:'',data:null};adm={id:0,pass:'',info:null};authView()}
 function spark(s,w=84,h=30){const a=hist[s]||[];if(a.length<2)return'';const mn=Math.min(...a),mx=Math.max(...a),r=mx-mn||1,
  p=a.map((v,i)=>`${(i/(a.length-1)*w).toFixed(1)},${(h-3-(v-mn)/r*(h-6)).toFixed(1)}`).join(' '),c=a[a.length-1]>=a[0]?'#2ee59d':'#ff5d73';
  return`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${p}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
@@ -142,20 +144,26 @@ function go(t){tab=t;if(t=='top')api('top').then(l=>{topL=l;if(tab=='top')draw()
 function bank(){const p=Math.min(100,me.balance/me.need*100),ok=me.balance>=me.need;
  return`<div class="card cc"><div class="cct"><span>بانک‌سیم</span><span class="chipic"></span></div>
 <div><div class="mu">موجودی حساب</div><div class="bal"><span data-bal>${f(me.balance)}</span><small>تومان</small></div><div class="mu" data-balsh>${short(me.balance)}</div></div>
-<div class="ccb"><span dir="ltr">@${me.username}</span><span>ثروت کل: <b data-nw>${f(me.balance+worth())}</b></span></div></div>
+<div class="ccb"><span dir="ltr">@${me.username}</span><span>ثروت کل: <b data-nw>${f(net())}</b></span></div></div>
 <div class="card sal"><div class="rw"><svg viewBox="0 0 100 100"><defs><linearGradient id="gr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f8cff"/><stop offset="1" stop-color="#2ee59d"/></linearGradient></defs>
 <circle class="rb" cx="50" cy="50" r="44"/><circle class="rf" id="rg" cx="50" cy="50" r="44" stroke-dasharray="276.46" stroke-dashoffset="0" transform="rotate(-90 50 50)"/></svg><div class="rc" id="cd"></div></div>
 <div><h2>حقوق روزانه</h2><p class="mu" style="margin:4px 0 10px">هر ۲۴ ساعت ${f(me.salary)} تومان به حساب شما واریز می‌شود.</p><button id="sal" class="full">دریافت حقوق</button></div></div>
 <div class="card"><div class="hd"><h2>💸 انتقال پول</h2></div><div class="row"><input id="tt" placeholder="نام کاربری گیرنده" dir="ltr"><input id="ta" type="number" placeholder="مبلغ (تومان)"></div><button class="full" id="tr" style="margin-top:8px">ارسال</button></div>
+<div class="card"><div class="hd"><h2>🏦 سپرده و وام</h2><span class="mu">سود سپرده ${d(me.dr*100,2)}٪ · سود وام ${d(me.lr*100,2)}٪ روزانه</span></div>
+<div class="st" style="grid-template-columns:1fr 1fr"><div><span class="mu">سپرده</span><b class="up">${f(me.dep)}</b></div><div><span class="mu">بدهی وام</span><b class="dn">${f(me.loan)}</b></div></div>
+<input id="ba" type="number" placeholder="مبلغ (تومان)" style="margin-top:10px">
+<div class="two"><button class="b" id="bd">واریز به سپرده</button><button class="g" id="bw">برداشت سپرده</button><button id="bl">گرفتن وام</button><button class="s" id="br">پرداخت وام</button></div>
+<p class="mu" style="margin:8px 0 0">سقف وام ۵۰٪ ثروت خالص شماست و نیمی از هر حقوق روزانه صرف بازپرداخت وام می‌شود.</p></div>
 <div class="card"><div class="hd"><h2>🏗 ساخت صرافی اختصاصی</h2><span class="mu">${d(p,1)}٪</span></div>
 <p class="mu" style="margin:0">ساخت صرافی ${f(me.need)} تومان هزینه دارد و کارمزد همه‌ی معاملات آن به شما می‌رسد.</p>
 <div class="bar"><i style="width:${p}%"></i></div>
 <input id="xn" placeholder="نام صرافی"><input id="xp" type="password" placeholder="رمز اختصاصی پنل ادمین (حداقل ۶ کاراکتر)" dir="ltr">
-<button class="full" id="mx" ${ok?'':'disabled'}>${ok?'ساخت صرافی':'موجودی کافی نیست'}</button></div>`}
-function ex(){const m=mk.find(x=>x.sym==sel)||{name:'',price:0},h=me.hold.find(x=>x.sym==sel)?.amt||0,e=exs.find(x=>x.id==xs)||{fee:.002,bankrupt:0,name:''};
+<button class="full" id="mx" ${ok?'':'disabled'}>${ok?'ساخت صرافی':'موجودی کافی نیست'}</button></div>
+<p style="text-align:center;margin:6px 0 0"><span class="mu" data-t="cen" style="cursor:pointer;text-decoration:underline">پنل مدیریت مرکزی</span></p>`}
+function ex(){const lst=mk.filter(x=>!x.ex||x.ex==xs);if(lst.length&&!lst.find(x=>x.sym==sel))sel=lst[0].sym;const m=mk.find(x=>x.sym==sel)||{name:'',price:0},h=me.hold.find(x=>x.sym==sel)?.amt||0,e=exs.find(x=>x.id==xs)||{fee:.002,bankrupt:0,name:''};
  return`<div class="pills" style="margin-bottom:14px">${exs.map(x=>`<div class="pl ${x.id==xs?'on':''} ${x.bankrupt?'dead':''}" data-x="${x.id}"><b>${x.name}</b><span class="mu">کارمزد ${d(x.fee*100,2)}٪</span>${x.bankrupt?'<span class="tag">ورشکسته</span>':''}</div>`).join('')}</div>
 <div class="card"><div class="hd"><h2>📈 بازار</h2><span class="mu">به‌روزرسانی زنده</span></div>
-${mk.map(x=>`<div class="coin ${x.sym==sel?'sel':''}" data-s="${x.sym}">${avatar(x.sym)}<div class="ci"><b>${x.name}</b><span class="mu">${x.sym}</span></div>
+${lst.map(x=>`<div class="coin ${x.sym==sel?'sel':''}" data-s="${x.sym}">${avatar(x.sym)}<div class="ci"><b>${x.name}</b><span class="mu">${x.sym}</span></div>
 <div class="sp" data-sp="${x.sym}">${spark(x.sym)}</div><div class="cp"><b data-p="${x.sym}">${f(x.price)}</b><span class="chip ${x.change>=0?'up':'dn'}" data-c="${x.sym}">${d(x.change,2)}٪</span></div></div>`).join('')}</div>
 <div class="card"><div class="big"><div><div class="mu">${m.name} · ${sel}</div><div class="pr"><span data-p="${sel}">${f(m.price)}</span> <small class="mu" style="font-size:13px">تومان</small></div></div><div class="sp" style="flex:0 0 130px;height:50px" data-sp="${sel}" data-w="130" data-h="50">${spark(sel,130,50)}</div></div>
 <div class="mu" style="margin-bottom:12px">دارایی شما: <b style="color:var(--tx)">${d(h)} ${sel}</b> · کارمزد ${d(e.fee*100,2)}٪ در «${e.name}»</div>
@@ -167,7 +175,7 @@ ${e.bankrupt?'<div class="err">این صرافی ورشکسته شده و معا
 <button class="full ${side=='buy'?'b':'s'}" id="go" ${e.bankrupt?'disabled':''}>${side=='buy'?'خرید':'فروش'} ${m.name}</button></div>
 ${xs!=1?`<div class="card"><div class="hd"><h2>📣 ثبت شکایت از «${e.name}»</h2></div><p class="mu" style="margin:0 0 6px">اگر صاحب صرافی تخلف کرده، شکایت کنید. با شکایت ۵ نفر صرافی ورشکسته می‌شود.</p><textarea id="ct" placeholder="متن شکایت (۱۰ تا ۵۰۰ حرف)"></textarea><button class="g full" id="cp">ارسال شکایت</button></div>`:''}`}
 function wal(){const tot=worth();
- return`<div class="card"><div class="st"><div><span class="mu">موجودی نقد</span><b>${f(me.balance)}</b></div><div><span class="mu">ارزش ارزها</span><b data-hv>${f(tot)}</b></div><div><span class="mu">ثروت کل</span><b data-nw>${f(me.balance+tot)}</b></div></div></div>
+ return`<div class="card"><div class="st"><div><span class="mu">موجودی نقد</span><b>${f(me.balance)}</b></div><div><span class="mu">ارزش ارزها</span><b data-hv>${f(tot)}</b></div><div><span class="mu">ثروت کل</span><b data-nw>${f(net())}</b></div></div></div>
 <div class="card"><div class="hd"><h2>👛 دارایی‌های من</h2></div>${me.hold.length?me.hold.map(h=>{const m=mk.find(x=>x.sym==h.sym)||{name:h.sym};return`<div class="li" data-go="${h.sym}" style="cursor:pointer">${avatar(h.sym)}<div class="ci"><b>${m.name}</b><span class="mu">${d(h.amt)} ${h.sym}</span></div><div class="cp"><b data-v="${h.sym}" data-a="${h.amt}">${f(h.amt*price(h.sym))}</b><span class="mu">تومان</span></div></div>`}).join(''):`<div class="empty"><b>🪙</b>هنوز ارزی نخریده‌اید.<br><button style="margin-top:12px" data-t="ex">رفتن به صرافی</button></div>`}</div>`}
 function topv(){const medal=['🥇','🥈','🥉'];
  return`<div class="card"><div class="hd"><h2>🏆 ثروتمندترین‌ها</h2><span class="mu">۱۰ نفر برتر</span></div>${topL.length?topL.map((u,i)=>`<div class="li ${u.username==me.username?'me':''}"><div class="rk">${medal[i]||fa(i+1)}</div><div class="ci"><b dir="ltr" style="text-align:right">${u.username}${u.username==me.username?' (شما)':''}</b><span class="mu">${short(u.wealth)}</span></div><b>${f(u.wealth)}</b></div>`).join(''):'<div class="empty"><b>⏳</b>در حال بارگذاری...</div>'}</div>`}
@@ -180,25 +188,44 @@ function admin(){const i=adm.info;
 <div class="card"><div class="hd"><h2>⚙️ تنظیمات</h2></div>
 <div class="mu">کارمزد (۰ تا ۵٪)</div><div class="row"><input id="fe" type="number" step="0.1" value="${i.fee*100}"><button id="sf">ثبت</button></div>
 <div class="mu" style="margin-top:8px">نام صرافی</div><div class="row"><input id="nm" value="${i.name}"><button id="sn">تغییر</button></div>
-<div class="mu" style="margin-top:8px">رمز پنل</div><div class="row"><input id="np" type="password" placeholder="رمز جدید" dir="ltr"><button id="sp">تغییر</button></div></div>`}
+<div class="mu" style="margin-top:8px">رمز پنل</div><div class="row"><input id="np" type="password" placeholder="رمز جدید" dir="ltr"><button id="sp">تغییر</button></div></div>
+<div class="card"><div class="hd"><h2>🪙 ارزهای صرافی من</h2><span class="mu">هزینه لیست ${f(me.lf)} تومان</span></div>
+${(adm.coins||[]).map(c=>`<div class="li">${avatar(c.sym)}<div class="ci"><b>${esc(c.name)}</b><span class="mu">${c.sym} · ${f(c.price)} تومان</span></div><button class="s" data-dc="${c.sym}" style="padding:6px 12px">حذف</button></div>`).join('')||'<div class="mu">هنوز ارزی ثبت نکرده‌اید.</div>'}
+<div class="row" style="margin-top:10px"><input id="cs" placeholder="نماد (مثلاً MYC)" dir="ltr"><input id="cn" placeholder="نام ارز"><input id="cpz" type="number" placeholder="قیمت اولیه (تومان)"></div>
+<button class="full" id="lc" style="margin-top:6px">لیست ارز جدید</button>
+<p class="mu" style="margin:8px 0 0">حداکثر ۳ ارز برای هر صرافی؛ ارز فقط در همین صرافی معامله می‌شود. با حذف ارز، دارندگان به قیمت روز تسویه می‌شوند.</p></div>`}
 /* ---------- render ---------- */
-function draw(){A.innerHTML=`<div class="w">${head()}${{bank,ex,wal,top:topv,adm:admin}[tab]()}</div>${nav()}`;
+function central(){const c=cen.data;
+ if(!c)return`<div class="card"><div class="hd"><h2>🛡 پنل مدیریت مرکزی</h2><button class="g" id="cb" style="padding:6px 14px">بازگشت</button></div><input id="cpw" type="password" placeholder="رمز صرافی مرکزی" dir="ltr"><button class="full" id="cl" style="margin-top:6px">ورود</button></div>`;
+ return`<div class="card"><div class="hd"><h2>🛡 صرافی‌ها</h2><button class="g" id="cx" style="padding:6px 14px">خروج</button></div>
+${c.ex.filter(x=>x.id!=1).map(x=>`<div class="li"><div class="ci"><b>${esc(x.name)} ${x.bankrupt?'<span class="tag">ورشکسته</span>':''}</b><span class="mu">حجم ${f(x.volume)} · معامله ${f(x.trades)}</span></div>${x.bankrupt?`<button class="b" data-ci="reinstate" data-id="${x.id}" style="padding:6px 12px">بازگشایی</button>`:`<button class="s" data-ci="bankrupt" data-id="${x.id}" style="padding:6px 12px">ورشکسته</button>`}</div>`).join('')||'<div class="mu">صرافی دیگری وجود ندارد.</div>'}</div>
+<div class="card"><div class="hd"><h2>📣 شکایت‌ها</h2></div>${c.complaints.map(k=>`<div class="li" style="flex-direction:column;align-items:stretch"><div><b>${esc(k.exname)}</b> <span class="mu" dir="ltr">@${esc(k.username)}</span> ${k.status=='open'?'<span class="tag">باز</span>':'<span class="mu">(رسیدگی شد)</span>'}</div><div>${esc(k.text)}</div>${k.reply?`<div class="mu">پاسخ: ${esc(k.reply)}</div>`:''}${k.status=='open'?`<div class="row"><input id="rp${k.id}" placeholder="پاسخ"><button data-rs="${k.id}" style="padding:6px 12px">رسیدگی</button></div>`:''}</div>`).join('')||'<div class="empty"><b>✅</b>شکایتی ثبت نشده.</div>'}</div>`}
+function draw(){A.innerHTML=`<div class="w">${head()}${{bank,ex,wal,top:topv,adm:admin,cen:central}[tab]()}</div>${nav()}`;
  $('#lo').onclick=out;$$('[data-t]').forEach(b=>b.onclick=()=>go(b.dataset.t));
  const t=async(fn,ok)=>{try{await fn();if(ok)toast(ok);draw()}catch(x){toast(x.message,'err')}};
  const on=(id,fn)=>$('#'+id)&&($('#'+id).onclick=fn);
- const ad=(action,value,ok)=>t(async()=>{const j=await api('exchange/admin',{id:adm.id,pass:adm.pass,action,value});me=j.me;adm.info=j.ex;if(action=='pass')adm.pass=value;await refresh()},ok);
+ const ad=(action,value,ok)=>t(async()=>{const j=await api('exchange/admin',{id:adm.id,pass:adm.pass,action,value});me=j.me;adm.info=j.ex;adm.coins=j.coins;if(action=='pass')adm.pass=value;await refresh();mk=await api('market');feed()},ok);
  on('sal',()=>t(async()=>{me=await api('salary',{})},'حقوق به حساب شما واریز شد 💰'));
  on('tr',()=>t(async()=>{me=await api('transfer',{to:$('#tt').value.trim(),amount:$('#ta').value})},'انتقال با موفقیت انجام شد'));
+ const bk=a=>t(async()=>{me=await api('bank',{action:a,amount:$('#ba').value})},'انجام شد');
+ on('bd',()=>bk('deposit'));on('bw',()=>bk('withdraw'));on('bl',()=>bk('borrow'));on('br',()=>bk('repay'));
+ on('lc',()=>ad('coin',{sym:$('#cs').value,name:$('#cn').value,price:$('#cpz').value},'ارز لیست شد 🪙'));
+ $$('[data-dc]').forEach(b=>b.onclick=()=>ad('delcoin',b.dataset.dc,'ارز حذف شد'));
+ const cn=(action,id,value)=>t(async()=>{cen.data=await api('central',{pass:cen.pass,action,id,value})});
+ on('cl',()=>t(async()=>{cen.pass=$('#cpw').value;cen.data=await api('central',{pass:cen.pass})}));
+ on('cb',()=>go('bank'));on('cx',()=>{cen={pass:'',data:null};go('bank')});
+ $$('[data-ci]').forEach(b=>b.onclick=()=>cn(b.dataset.ci,b.dataset.id));
+ $$('[data-rs]').forEach(b=>b.onclick=()=>cn('resolve',b.dataset.rs,$('#rp'+b.dataset.rs).value));
  on('mx',()=>t(async()=>{me=await api('exchange/create',{name:$('#xn').value,pass:$('#xp').value});exs=await api('exchanges');tab='adm'},'صرافی شما ساخته شد 🎉'));
  on('go',()=>t(async()=>{me=await api('trade',{ex:xs,sym:sel,side,amount:$('#amt').value})},side=='buy'?'خرید انجام شد':'فروش انجام شد'));
  on('cp',()=>t(async()=>{await api('complaint',{ex:xs,text:$('#ct').value})},'شکایت شما ثبت شد'));
- on('al',()=>t(async()=>{adm.id=+$('#ai').value;adm.pass=$('#ap').value;const j=await api('exchange/admin',{id:adm.id,pass:adm.pass,action:'info'});adm.info=j.ex}));
+ on('al',()=>t(async()=>{adm.id=+$('#ai').value;adm.pass=$('#ap').value;const j=await api('exchange/admin',{id:adm.id,pass:adm.pass,action:'info'});adm.info=j.ex;adm.coins=j.coins}));
  on('ao',()=>{adm={id:0,pass:'',info:null};draw()});
  on('wd',()=>ad('withdraw',0,'کارمزد به حساب شما واریز شد'));on('sf',()=>ad('fee',$('#fe').value,'کارمزد ثبت شد'));
  on('sn',()=>ad('rename',$('#nm').value,'نام تغییر کرد'));on('sp',()=>ad('pass',$('#np').value,'رمز تغییر کرد'));
  $$('[data-x]').forEach(p=>p.onclick=()=>{xs=+p.dataset.x;draw()});
  $$('[data-s]').forEach(r=>r.onclick=()=>{sel=r.dataset.s;draw()});
- $$('[data-go]').forEach(r=>r.onclick=()=>{sel=r.dataset.go;go('ex')});
+ $$('[data-go]').forEach(r=>r.onclick=()=>{sel=r.dataset.go;const cc=mk.find(x=>x.sym==sel);if(cc&&cc.ex)xs=cc.ex;go('ex')});
  $$('[data-side]').forEach(b=>b.onclick=()=>{side=b.dataset.side;draw()});
  $$('[data-q]').forEach(b=>b.onclick=()=>{const q=+b.dataset.q,v=side=='buy'?Math.floor(me.balance*q):(me.hold.find(x=>x.sym==sel)?.amt||0)*q;$('#amt').value=side=='buy'?v:+v.toFixed(8);est()});
  if($('#amt'))$('#amt').oninput=est;
@@ -215,7 +242,7 @@ function live(){mk.forEach(x=>{$$(`[data-p="${x.sym}"]`).forEach(e=>e.textConten
   $$(`[data-c="${x.sym}"]`).forEach(e=>{e.textContent=d(x.change,2)+'٪';e.className='chip '+(x.change>=0?'up':'dn')});
   $$(`[data-sp="${x.sym}"]`).forEach(e=>e.innerHTML=spark(x.sym,+e.dataset.w||84,+e.dataset.h||30))});
  $$('[data-v]').forEach(e=>e.textContent=f(+e.dataset.a*price(e.dataset.v)));
- $$('[data-hv]').forEach(e=>e.textContent=f(worth()));$$('[data-nw]').forEach(e=>e.textContent=f(me.balance+worth()));est();tick()}
+ $$('[data-hv]').forEach(e=>e.textContent=f(worth()));$$('[data-nw]').forEach(e=>e.textContent=f(net()));est();tick()}
 function feed(){mk.forEach(x=>{const h=hist[x.sym]||(hist[x.sym]=[x.price/(1+x.change/100)]);h.push(x.price);if(h.length>40)h.shift()})}
 async function refresh(){me=await api('me');exs=await api('exchanges')}
 async function boot(){try{await refresh();mk=await api('market');feed();draw()}catch(x){authView()}}
